@@ -33,6 +33,27 @@ struct Stack(T) {
     arrayForm ~= value;
   }
 }
+unittest {
+  Stack!int s;
+  s.push(1);
+  s.push(2);
+  s.push(3);
+  mixin(assertString("!s.isEmpty", "s"));
+  
+  int p = s.pop;
+  mixin(assertString("p == 3", "p", "s"));
+  p = s.pop;
+  mixin(assertString("p == 2", "p", "s"));
+  
+  Maybe!int mp = s.popSafe;
+  mixin(assertString("mp.valid", "mp", "s"));
+  mixin(assertString("mp == 1", "mp", "s"));
+  
+  mixin(assertString("s.isEmpty", "s"));
+  
+  mp = s.popSafe;
+  mixin(assertString("!mp.valid", "s"));
+}
 
 // dbb7e8b4-dc97-5875-b78a-67c7d6d5e9c8
 struct Maybe(T) {
@@ -109,6 +130,10 @@ enum T[] literalAs(T, alias array) = (){
     ret ~= cast(T)elem;
   return ret;
 }();
+unittest {
+  NonemptyString[] strs = literalAs!(NonemptyString, ["asdf", "xyzw"]);
+  mixin(assertString(q"[ strs == ["asdf", "xyzw"] ]"));
+}
 
 // e44747b8-5e5d-57b6-a099-4904d0c22d8f
 struct DebugEmpty { }
@@ -238,6 +263,15 @@ enum bool isNullInit(T) = () {
   else
     return false;
 } ();
+unittest {
+  class Cla {}
+  struct Sct {}
+  mixin(assertString("isNullable!Cla"));
+  mixin(assertString("isNullable!(int*)"));
+  mixin(assertString("isNullable!(void*)"));
+  mixin(assertString("!isNullable!Sct"));
+  mixin(assertString("!isNullable!int"));
+}
 
 // b76550a2-c711-530b-8a4f-fe39f17476d6
 T[] intersect(T)(const(T[]) list1, const(T[]) list2) {
@@ -367,4 +401,10 @@ string escapeQuotes(string stringToEscape) {
   import std.regex : ctRegex, replaceAll;
   static auto quoteRegex = ctRegex!"\"";
   return stringToEscape.replaceAll(quoteRegex, "\\$&");
+}
+unittest {
+  string str = q"["asdf"]";
+  string escStr = norEscapeQuotes(str);
+  bool matches = (escStr == q"[\"asdf\"]");
+  mixin(assertString("matches", "str", "escStr"));
 }
