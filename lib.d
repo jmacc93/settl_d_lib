@@ -1,5 +1,14 @@
 module lib;
 
+// 364c8f85-49a7-54cb-955b-d8c44091a701 #todo
+
+template from(string mod) {
+  mixin("import from = " ~ mod ~ ";");
+}
+unittest {
+  string res = from!"std.array".replace("xyyx", "y", "x");
+  mixin(assertString(q"[ res == "xxxx" ]"));
+}
 
 // 107b6052-6d0e-5d72-a977-a2f974e53b34
 struct Stack(T) {
@@ -97,7 +106,7 @@ enum NonemptyString[] makeNonempty(string[] array) = (){
 enum T[] literalAs(T, alias array) = (){
   T[] ret;
   foreach(elem; array)
-    ret ~= cast(CustomInt)elem;
+    ret ~= cast(T)elem;
   return ret;
 }();
 
@@ -146,18 +155,24 @@ void writeStack() {
 // 9fd54247-bbce-5385-955d-4a39d3429a5f
 string assertString(string msg = "", ulong line = __LINE__)(string expr, string[] otherStrings...) {
   import std.conv : to;
+  string escapedExpr = norEscapeQuotes(expr);
   string ret = "import std.stdio;
   if(!(" ~ expr ~ ")){ // " ~ (line+2).to!string ~ "
     writeln(\"=== Assertion failure, printing stack ===\"); // " ~ (line + 3).to!string ~ "
     writeStack(); // " ~ (line+4).to!string ~ "
-    writeln(\"Assertion failure on line " ~ boldTxt ~ line.to!string ~ noStyle ~ " for " ~ redFg ~ expr ~ noStyle ~ "\"); // " ~ (line+5).to!string ~ "
+    writeln(\"Assertion failure on line " ~ boldTxt ~ line.to!string ~ noStyle ~ " for " ~ redFg ~ escapedExpr ~ noStyle ~ "\"); // " ~ (line+5).to!string ~ "
     writeln(\"Other values:\"); // " ~ (line+6).to!string ~ "\n";
   int lineOffset = 0;
   foreach(string str; otherStrings) {
     lineOffset++;
-    ret ~= "writeln(\"  " ~ greenFg ~ str ~ noStyle ~ " == \", " ~ str ~ "); // " ~ (line + 6 + lineOffset).to!string ~"\n";
+    string escapedStr = norEscapeQuotes(str);
+    ret ~= "writeln(\"  " ~ greenFg ~ escapedStr ~ noStyle ~ " == \", " ~ str ~ "); // " ~ (line + 6 + lineOffset).to!string ~"\n";
   }
   return ret ~ "assert(false, \"" ~ msg ~ "\"); // " ~ (line + lineOffset + 7).to!string ~"\n}";
+}
+unittest {
+  mixin(assertString("1 == 1"));
+  mixin(assertString(q"[ ("a" ~ "b") == "ab" ]"));
 }
 
 // e1c33342-b5d6-5501-9014-077f6bb433e0
@@ -334,4 +349,22 @@ unittest {
     whichSucceeded = 4;
   });
   mixin(assertString("whichSucceeded == 3", "whichSucceeded"));
+}
+
+
+string readEntireFile(from!"std.stdio".File file) {
+  string retString;
+  foreach(ubyte[] chunk; file.byChunk(1024))
+    retString ~= cast(string)chunk;
+  return retString;
+}
+
+string norEscapeQuotes(string stringToEscape) { // no-regex version of escapeQuotes
+  import std.array : replace;
+  return stringToEscape.replace("\"","\\\"");
+}
+string escapeQuotes(string stringToEscape) {
+  import std.regex : ctRegex, replaceAll;
+  static auto quoteRegex = ctRegex!"\"";
+  return stringToEscape.replaceAll(quoteRegex, "\\$&");
 }
