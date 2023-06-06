@@ -10,6 +10,9 @@ unittest {
   mixin(assertString(q"[ res == "xxxx" ]"));
 }
 
+// 8dafd46c-75f8-542d-a335-3e3d1a9b1f55
+enum bool hasModule(string modName) = !isVersion!(ctConcat!("noModule_", ctReplace!(modName, ".", "_"))) && __traits(compiles, from!modName);
+
 // 107b6052-6d0e-5d72-a977-a2f974e53b34
 struct Stack(T) {
   T[] arrayForm;
