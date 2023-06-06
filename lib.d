@@ -177,6 +177,41 @@ void writeStack() {
   defaultTraceDeallocator(trace);
 }
 
+// 4cbbdcd4-6dbf-589f-8b62-bfcceaf64b69
+ulong countStackDepth() {
+  import core.runtime: defaultTraceHandler, defaultTraceDeallocator;
+  
+  auto trace = defaultTraceHandler(null);
+  ulong depth = 0;
+  foreach(line; trace)
+    depth++;
+  defaultTraceDeallocator(trace);
+  return depth;
+}
+
+private ulong[string] collectedStacks;
+private ulong collectedStacksCallCount = 0;
+void dbgCollectStacksAndWriteEvery(ulong writeEvery = 10) {
+  import core.runtime : defaultTraceHandler, defaultTraceDeallocator;
+  import std.string : format;
+  
+  auto trace = defaultTraceHandler(null);
+  foreach(line; trace) {
+    if(writeAllStackLines || line.ptr[0] != '?') {
+      string lineStr = format!"%.*s"(cast(int)line.length, line.ptr);
+      collectedStacks.update(lineStr, () => 0, (ulong oldCount) => oldCount+1);
+    }
+  }
+  defaultTraceDeallocator(trace);
+  
+  collectedStacksCallCount++;
+  if(collectedStacksCallCount % writeEvery == 0) {
+    import std.stdio: writeln;
+    foreach(string line, ulong count; collectedStacks)
+      writeln(line, " ", redFg, count, noStyle);
+  }
+}
+
 // 9fd54247-bbce-5385-955d-4a39d3429a5f
 string assertString(string msg = "", ulong line = __LINE__)(string expr, string[] otherStrings...) {
   import std.conv : to;
@@ -213,6 +248,25 @@ void dbgln(int line = __LINE__, string mod = __MODULE__, string fn = __PRETTY_FU
   import std.stdio : writeln;
   writeln(line, " (", mod, ":  ", fn, ")");
 }
+// 20ae8807-f15b-5b2f-ab7c-536bd6c192c8
+void dbgln(int line = __LINE__) {
+  import std.stdio : writeln;
+  writeln(line);
+}
+
+// d95131cb-75a9-51bc-b87f-a86db950010b
+T dbgEchoFull(int line = __LINE__, string mod = __MODULE__, string fn = __PRETTY_FUNCTION__, T, Args...)(T input, Args extraArgs) {
+  import std.stdio : writeln;
+  writeln(line, " (", mod, ":  ", fn, ") ", input, extraArgs);
+  return input;
+}
+
+// 3661b33a-34fb-52ba-b92a-a55f44de4b6d
+T dbgEcho(int line = __LINE__, T, Args...)(T input, Args extraArgs) {
+  import std.stdio : writeln;
+  writeln(line, ": ", input, extraArgs);
+  return input;
+}
 
 // b16a1820-bc95-54bf-adda-3c0b3bcaff0c
 string dbgwritelnFullMixin(int line = __LINE__, string mod = __MODULE__, string fn = __PRETTY_FUNCTION__)(string[] args...) {
@@ -239,6 +293,41 @@ string dbgwritelnMixin(int line = __LINE__)(string[] args...) {
   return ret;
 }
 
+// 47536b16-ae51-555d-8e8f-325907bed3b4
+struct K {
+  string stringForm;
+}
+string dbgWriteMixin(Args...)(ulong line = __LINE__) {
+  import std.format : format;
+  import std.stdio: write;
+  
+  string structureTemplate = q"[  {
+    import lib : countStackDepth, redFg, noStyle, greenFg;
+    import std.stdio: write;
+    ulong depth = countStackDepth() - 1;
+    write(redFg);
+    for(ulong i = 0; i < depth; i++)
+      write("-");
+    write(noStyle);
+    write(" ", %d, ": ");%s
+    write("\n");
+  }]"; // parameters: %d line, %s body with write lines
+  
+  string body = "\n";
+  static foreach(i, arg; Args) {
+    static if(i > 0)
+      body ~= "    write(\"; \");";
+    static if(is(typeof(arg) == K))
+      body ~= "    write(greenFg, \"%s\", noStyle, \" \", %s );\n".format(arg.stringForm, arg.stringForm);
+    else static if(is(typeof(arg) == string))
+      body ~= "    write(\"%s\");\n".format(arg);
+    else
+      body ~= "    write(\"Unknown dbgWriteMixin type: " ~ arg ~ "\");\n";
+  }
+  
+  return structureTemplate.format(line, body);
+}
+
 // b167010c-423d-5eeb-b24a-b64cc10b7a4c
 void dbgwrite(int line = __LINE__, Args...)(Args args) {
   import std.stdio : writeln;
@@ -254,6 +343,16 @@ immutable string greenBg  = "\033[42m";
 immutable string blueBg   = "\033[44m";
 immutable string boldTxt  = "\033[1m";
 immutable string noStyle  = "\033[0m";
+
+// 80c68167-9efb-5508-bff8-af5f534553b6
+alias ColorAliasSeq(Args...) = Args;
+enum auto textRedFg(alias str)   = ColorAliasSeq!(redFg,   str, noStyle);
+enum auto textGreenFg(alias str) = ColorAliasSeq!(greenFg, str, noStyle);
+enum auto textBlueFg(alias str)  = ColorAliasSeq!(blueFg,  str, noStyle);
+enum auto textRedBg(alias str)   = ColorAliasSeq!(redBg,   str, noStyle);
+enum auto textGreenBg(alias str) = ColorAliasSeq!(greenBg, str, noStyle);
+enum auto textBlueBg(alias str)  = ColorAliasSeq!(blueBg,  str, noStyle);
+enum auto textBold(alias str) = ColorAliasSeq!(boldTxt, str, noStyle);
 
 // c54fc86c-1f0f-51ed-b1ef-fb26e533dc4f
 enum bool isNullable(T) = __traits(compiles, T.init is null);
@@ -385,7 +484,33 @@ unittest {
   mixin(assertString("whichSucceeded == 3", "whichSucceeded"));
 }
 
+// 2b19627e-0d25-53f6-bb9b-e9e2ff4d5d65
+T appendToExceptions(T)(lazy T mightThrowException, string messageToAppend) {
+  try {
+    return mightThrowException();
+  } catch(Exception oldException) {
+    string newMsg = oldException.msg ~ "; " ~ messageToAppend;
+    throw new Exception(newMsg, oldException.file, oldException.line);
+  }
+}
+unittest {
+  string excMsg = "";
+  try {
+    appendToExceptions(() {
+      throw new Exception("xxx");
+    }(), "yyy");
+  } catch(Exception caughtExc) {
+    excMsg = caughtExc.msg;
+  }
+  mixin(assertString(q"[excMsg == "xxx; yyy"]", "excMsg"));
+}
 
+T appendThisLineToExceptions(T, ulong line = __LINE__)(lazy T mightThrowException) {
+  import std.conv : to;
+  return appendToExceptions(mightThrowException(), "  (from line " ~ line.to!string ~ ")");
+}
+
+// 740ede60-885a-5305-ad7a-a3febf7c0bc2
 string readEntireFile(from!"std.stdio".File file) {
   string retString;
   foreach(ubyte[] chunk; file.byChunk(1024))
@@ -407,4 +532,223 @@ unittest {
   string escStr = norEscapeQuotes(str);
   bool matches = (escStr == q"[\"asdf\"]");
   mixin(assertString("matches", "str", "escStr"));
+}
+
+enum string ctConcat(args...) = (){
+  string ret;
+  foreach(string str; args)
+    ret ~= str;
+  return ret;
+}();
+
+// ceea52dc-cd9d-5cd2-897f-3ae09a365923
+enum string ctReplace(string original, string from, string to)  = (){
+  import std.string : replace;
+  return original.replace(from, to);
+}();
+
+unittest {
+  string str = ctConcat!(
+    "xxx",
+    "yyy"
+  );
+  string correctOutput = "xxxyyy";
+  mixin(assertString("str == correctOutput", "str", "correctOutput"));
+}
+
+// 98004b1f-1976-5b30-b673-86d0721e5a6b
+template isVersion(string v) {
+  static if(v == "debug") {
+    debug
+      enum bool isVersion = true;
+    else
+      enum bool isVersion = false;
+  } else {
+    mixin("version("~v~")
+      enum bool isVersion = true;
+    else
+      enum bool isVersion = false;");
+  }
+}
+// 10ee45c3-6643-5c18-9f98-fddb0c83328e
+template isDebug(string v = "") {
+  static if(v == "") {
+    debug
+      enum bool isDebug = true;
+    else
+      enum bool isDebug = false;
+  } else {
+    mixin("debug("~v~")
+      enum bool isDebug = true;
+    else
+      enum bool isDebug = false;");
+  }
+}
+
+// cddf19ef-2ec3-5af9-a552-a100c6123e52
+bool isAlphanumWord(string str) {
+  import std.regex: ctRegex, matchFirst;
+  enum auto alphanumWordRegex = ctRegex!"^[a-z0-9A-Z]+$";
+  auto captures = str.matchFirst(alphanumWordRegex);
+  return !captures.empty;
+}
+
+unittest {
+  mixin(assertString(q"[isAlphanumWord("ABC")]")); 
+  mixin(assertString(q"[isAlphanumWord("abc")]")); 
+  mixin(assertString(q"[isAlphanumWord("123")]")); 
+  mixin(assertString(q"[!isAlphanumWord("with space")]")); 
+  mixin(assertString(q"[!isAlphanumWord("with_underscore")]")); 
+}
+
+// 52eba935-9c14-50aa-8ad6-fedb99e7c46f
+string escapeJsonHazardousCharacters(string stringToEscape) {
+  import std.array : replace;
+  import std.regex : ctRegex, replaceAll;
+  static auto escapablesRegex = ctRegex!"[\\\\\"]";
+  static auto newlineRegex = ctRegex!"\n";
+  return stringToEscape.replaceAll(escapablesRegex, "\\$&").replaceAll(newlineRegex, "\\n");
+}
+
+
+// 69f21793-2f82-5a60-8832-88f4d37bfcaa
+// Amount is equivalent to Enumerated!("none", "some", "most", "all", "over")
+struct Amount { 
+  private enum : ulong {none, some, most, all, over}
+  private ulong value = none;
+  alias value this;
+  
+  static Amount from(bool useExceptions = true)(string str) {
+    Amount ret;
+    switch(str) {
+      case "none": ret.value = none;
+      case "some": ret.value = some;
+      case "most": ret.value = most;
+      case "all":  ret.value = all;
+      case "over": ret.value = over;
+      default:
+        static if(useExceptions)
+          throw new Exception("No such Amount " ~ str);
+        else
+          assert(0);
+    }
+    return ret;
+  }
+}
+
+// b3751d54-eca6-5351-8185-4a3d597e4fbc
+struct Enumerated(enumMembers...) {
+  alias This = typeof(this);
+  
+  mixin((){
+    import std.conv : to;
+    import std.uni : toLower;
+    
+    string ret = "enum : ulong {\n";
+    
+    static foreach(i, member; enumMembers) {
+      ret ~= "  " ~ member;
+      if(i < enumMembers.length - 1)
+        ret ~= ",";
+      ret ~=  " //\n";
+    }
+    ret ~= "}";
+    return ret;
+  }());
+  /*
+  ^ builds a mixin like:
+  ```D
+  enum : ulong {
+    A,
+    B,
+    C
+  }
+  ```
+  */
+  
+  ulong value;
+  alias value this;
+  
+  static This from(bool useExceptions = true)(string str) {
+    This ret;
+    mixin((){
+      return q"[
+      switch(str) {
+        ]" ~ (){
+          string casesString;
+          foreach(member; enumMembers)
+            casesString ~= "    case \"" ~ member ~ "\": ret.value = " ~ member ~ "; break;\n";
+          return casesString;
+        }() ~ q"[
+        default:
+          static if(useExceptions)
+            throw new Exception("No such Enumerated member " ~ str);
+          else
+            assert(0);
+      }
+      ]";
+    }());
+    /*
+    ^ builds a mixin like:
+    ```D
+    switch(str) {
+      case "A": ret.value = A; break;
+      case "B": ret.value = B; break;
+      case "C": ret.value = C; break;
+      default:
+        static if(useExceptions)
+          throw new Exception("No such Enumerated member " ~ str);
+        else
+          assert(0);
+    }
+    ```
+    */
+    return ret;
+  }
+  
+  bool hasValue(string str)() {
+    return mixin("value == " ~ str);
+  }
+  bool atLeast(string str)() {
+    return mixin("value >= " ~ str);
+  }
+}
+
+
+// a5aea0f2-6481-545b-a747-843adb8103cf
+void when()(lazy void noValue, bool condition) {
+  if(condition)
+    noValue();
+}
+T when(T)(lazy T value, bool condition, lazy T def) if(!is(T == void) && !is(T == noreturn)) {
+  if(condition)
+    return value();
+  else
+    return def();
+}
+
+unittest {
+  assert(false).when(false);
+  
+  int x = 5;
+  x += 1.when(false, -1);
+  mixin(assertString("x == 4", "x"));
+  
+  void foo() {}
+  
+  foo().when(true);
+  foo().when(false);
+}
+
+string[2] splitAtFirst(string splitterRegexString)(string stringToSplit) {
+  import std.regex: ctRegex, Captures, matchFirst;
+  
+  enum auto splitterRegex = ctRegex!splitterRegexString;
+  
+  auto captures = stringToSplit.matchFirst(splitterRegex);
+  
+  if(captures.empty)
+    return [stringToSplit, ""];
+  
+  return [captures.pre, captures.post];
 }
