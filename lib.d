@@ -449,22 +449,23 @@ void dbgCollectStacksAndWriteEvery(ulong writeEvery = 10) {
 }
 
 // 9fd54247-bbce-5385-955d-4a39d3429a5f
-string assertString(string msg = "", ulong line = __LINE__)(string expr, string[] otherStrings...) {
+string assertString(string msg = "", ulong line = __LINE__, string fnName = __FUNCTION__, string modName = __MODULE__)(string expr, string[] otherStrings...) {
   import std.conv : to;
   string escapedExpr = norEscapeQuotes(expr);
-  string ret = "import std.stdio;
-  if(!(" ~ expr ~ ")){ // " ~ (line+2).to!string ~ "
-    writeln(\"=== Assertion failure, printing stack ===\"); // " ~ (line + 3).to!string ~ "
-    writeStack(); // " ~ (line+4).to!string ~ "
-    writeln(\"Assertion failure on line " ~ boldTxt ~ line.to!string ~ noStyle ~ " for " ~ redFg ~ escapedExpr ~ noStyle ~ "\"); // " ~ (line+5).to!string ~ "
-    writeln(\"Other values:\"); // " ~ (line+6).to!string ~ "\n";
+  string ret = "{\n  import std.stdio; import lib : assertString;
+  if(!(" ~ expr ~ ")){ // " ~ (line+3).to!string ~ "
+    writeln(\"=== Assertion failure, printing stack ===\"); // " ~ (line + 4).to!string ~ "
+    writeStack(); // " ~ (line+5).to!string ~ "
+    writeln(\"Note: in module "~ modName ~" in function " ~ fnName ~"\"); // " ~ (line+6).to!string ~ "
+    writeln(\"Assertion failure on line " ~ boldTxt ~ line.to!string ~ noStyle ~ " for " ~ redFg ~ escapedExpr ~ noStyle ~ "\"); // " ~ (line+7).to!string ~ "
+    writeln(\"Other values:\"); // " ~ (line+8).to!string ~ "\n";
   int lineOffset = 0;
   foreach(string str; otherStrings) {
     lineOffset++;
     string escapedStr = norEscapeQuotes(str);
-    ret ~= "writeln(\"  " ~ greenFg ~ escapedStr ~ noStyle ~ " == \", " ~ str ~ "); // " ~ (line + 6 + lineOffset).to!string ~"\n";
+    ret ~= "writeln(\"  " ~ greenFg ~ escapedStr ~ noStyle ~ " == \", " ~ str ~ "); // " ~ (line + 9 + lineOffset).to!string ~"\n";
   }
-  return ret ~ "assert(false, \"" ~ msg ~ "\"); // " ~ (line + lineOffset + 7).to!string ~"\n}";
+  return ret ~ "assert(false, \"" ~ msg ~ "\"); // " ~ (line + lineOffset + 10).to!string ~"  \n}\n}";
 }
 unittest {
   mixin(assertString("1 == 1"));
@@ -480,7 +481,7 @@ void tracedAssert(bool res, string msg = "") {
 }
 
 // 0a8baa0e-bb69-577d-938e-6dac82dc91f3
-void dbgln(int line = __LINE__, string mod = __MODULE__, string fn = __PRETTY_FUNCTION__) {
+void dbglnFull(int line = __LINE__, string mod = __MODULE__, string fn = __PRETTY_FUNCTION__) {
   import std.stdio : writeln;
   writeln(line, " (", mod, ":  ", fn, ")");
 }
@@ -519,10 +520,10 @@ string dbgwritelnFullMixin(int line = __LINE__, string mod = __MODULE__, string 
   return ret;
 }
 // b16a1820-bc95-54bf-adda-3c0b3bcaff0c
-string dbgwritelnMixin(int line = __LINE__)(string[] args...) {
+string dbgwritelnMixin(string msg = "", int line = __LINE__)(string[] args...) {
   import std.conv : to;
   string ret = "import std.stdio : writeln;\n";
-  ret ~= "writeln(\"" ~ line.to!string ~ ":\");\n";
+  ret ~= "writeln(\"" ~ line.to!string ~ ": " ~ msg ~ "\");\n";
   foreach(string str; args) {
     ret ~= "writeln(\"  " ~ greenFg ~ str ~ noStyle ~" == \", " ~ str ~");\n";
   }
