@@ -55,6 +55,210 @@ unittest {
   mixin(assertString("!mp.valid", "s"));
 }
 
+// e35ddfb7-96a4-5e73-b846-9883d693bf80
+struct TwoEndedStack(T) {
+  T[] arrayForm;
+  
+  ulong start, end;
+  ulong length;
+  
+  invariant {
+    mixin(assertString("iff(start == end, length <= 1)", "start", "end", "length", "arrayForm.length", "this"));
+    mixin(assertString("(start < arrayForm.length) || (arrayForm.length == 0)", "start", "end", "arrayForm.length", "this"));
+    mixin(assertString("(end < arrayForm.length) || (arrayForm.length == 0)", "start", "end", "arrayForm.length", "this"));
+  }
+  
+  this(ulong n) {
+    arrayForm.length = n > 1 ? n : 1;
+  }
+  
+  ref T opIndex(ulong index) { return arrayForm[index]; }
+  
+  T[] asArray() {
+    T[] ret;
+    ulong i = start;
+    while(true) {
+      ret ~= arrayForm[i];
+      
+      if(i == end)
+        break;
+      increment(i);
+    }
+    return ret;
+  }
+  
+  private void increaseSize() {
+    ulong oldArrayLength = arrayForm.length;
+    arrayForm.length = (arrayForm.length + 1) * 2;
+    if(start > end) {
+      // move elements from start to new end of array
+      ulong iNew = arrayForm.length-1;
+      ulong iOld = oldArrayLength-1;
+      while(true) {
+        arrayForm[iNew] = arrayForm[iOld];
+        
+        if(iOld == start)
+          break;
+        iNew--;
+        iOld--;
+      }
+      start = iNew;
+    }
+  }
+  private bool isFull() {
+    return (length == arrayForm.length);
+  }
+  bool isEmpty() {
+    return (length == 0);
+  }
+  
+  private void increment(ref ulong side) {
+    side++;
+    if(side >= arrayForm.length)
+      side = 0;
+  }
+  private void decrement(ref ulong side) {
+    if(side == 0)
+      side = arrayForm.length - 1;
+    else
+      side--;
+  }
+  
+  void pushEnd(T value) {
+    if(isFull)
+      increaseSize();
+    length++;
+    if(length > 1)
+      increment(end);
+    arrayForm[end] = value;
+  }
+  void pushStart(T value) {
+    if(isFull)
+      increaseSize();
+    length++;
+    if(length > 1)
+      decrement(start);
+    arrayForm[start] = value;
+  }
+  
+  T popEnd() {
+    T ret = arrayForm[end];
+    length--;
+    decrement(end);
+    if(length == 0) {
+      start = 0;
+      end = 0;
+    }
+    return ret;
+  }
+  T popStart() {
+    T ret = arrayForm[start];
+    length--;
+    increment(start);
+    if(length == 0) {
+      start = 0;
+      end = 0;
+    }
+    return ret;
+  }
+  
+  Maybe!T popEndSafe() {
+    if(length == 0)
+      return Maybe!T.invalid;
+    else
+      return Maybe!T(popEnd());
+  }
+  Maybe!T popStartSafe() {
+    if(length == 0)
+      return Maybe!T.invalid;
+    else
+      return Maybe!T(popStart());
+  }
+  
+  T peekEnd() {
+    return arrayForm[end];
+  }
+  T peekStart() {
+    return arrayForm[start];
+  }
+  
+  Maybe!T peekEndSafe() {
+    if(length == 0)
+      return Maybe!T.invalid;
+    else
+      return Maybe!T(peekEnd());
+  }
+  Maybe!T peekStartSafe() {
+    if(length == 0)
+      return Maybe!T.invalid;
+    else
+      return Maybe!T(peekStart());
+  }
+}
+unittest {
+  auto stack = TwoEndedStack!int(3);
+  stack.pushEnd(3);
+  stack.pushEnd(5);
+  stack.pushEnd(7);
+  stack.pushEnd(11);
+  mixin(assertString("stack.length == 4", "stack.length", "stack"));
+  
+  int val;
+  
+  val = stack.popStart();
+  mixin(assertString("stack.length == 3", "stack.length", "stack"));
+  mixin(assertString("val == 3", "val", "stack"));
+  
+  val = stack.popEnd();
+  mixin(assertString("stack.length == 2", "stack.length", "stack"));
+  mixin(assertString("val == 11", "val", "stack"));
+  
+  stack.pushEnd(13);
+  stack.pushEnd(17);
+  mixin(assertString("stack.length == 4", "stack.length", "stack"));
+  
+  val = stack.popStart();
+  mixin(assertString("stack.length == 3", "stack.length", "stack"));
+  mixin(assertString("val == 5", "val", "stack"));
+  
+  int[] array = stack.asArray;
+  mixin(assertString("array == [7, 13, 17]", "array", "stack"));
+  // should be literally TwoEndedStack!int([3, 5, 7, 13, 17, 0], 2, 4, 3) here
+  
+  // following forces a resize with start > end (ie: requires moving elements to end of arrayForm on resize)
+  stack.pushEnd(19);
+  stack.pushEnd(23);
+  stack.pushEnd(29);
+  mixin(assertString("stack.asArray == [7, 13, 17, 19, 23, 29]", "stack.asArray", "stack"));
+  
+  stack.pushStart(31);
+  stack.pushStart(37);
+  stack.pushStart(41);
+  mixin(assertString("stack.asArray == [41, 37, 31, 7, 13, 17, 19, 23, 29]", "stack.asArray", "stack"));
+}
+
+unittest {
+  import std.random : uniform;
+  
+  TwoEndedStack!int stack;
+  int[] correctArray;
+  
+  enum ulong count = cast(ulong)10e2;
+  for(ulong i = 0; i < count; i++) {
+    int num = uniform(0, cast(int)10e6);
+    if(uniform(0.0f, 1.0f) < 0.5) {
+      stack.pushEnd(num);
+      correctArray ~= num;
+    } else {
+      stack.pushStart(num);
+      correctArray = num ~ correctArray;
+    }
+  }
+  
+  mixin(assertString("stack.length == correctArray.length", "stack", "correctArray"));
+  mixin(assertString("stack.asArray == correctArray", "stack", "correctArray"));
+}
+
 // dbb7e8b4-dc97-5875-b78a-67c7d6d5e9c8
 struct Maybe(T) {
   alias This = typeof(this);
