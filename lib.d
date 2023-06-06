@@ -29,6 +29,17 @@ struct Stack(T) {
     arrayForm.length--;
     return ret;
   }
+  
+  Maybe!T peekSafe() {
+    if(arrayForm.length > 0)
+      return Maybe!T(peek());
+    else
+      return Maybe!T.invalid;
+  }
+  T peek() {
+    return arrayForm[$-1];
+  }
+  
   void push(T value) {
     arrayForm ~= value;
   }
