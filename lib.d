@@ -1,9 +1,9 @@
 module lib;
 
-// 364c8f85-49a7-54cb-955b-d8c44091a701 #todo
 
+// 364c8f85-49a7-54cb-955b-d8c44091a701
 template from(string mod) {
-  mixin("import from = " ~ mod ~ ";");
+  mixin("import from = " ~ mod ~ ";"); // eg: import from = std.stdio;
 }
 unittest {
   string res = from!"std.array".replace("xyyx", "y", "x");
@@ -15,14 +15,15 @@ struct Stack(T) {
   T[] arrayForm;
   alias arrayForm this;
   
+  bool isEmpty() {
+    return arrayForm.length == 0;
+  }
+  
   Maybe!T popSafe() {
     if(arrayForm.length > 0)
       return Maybe!T(pop());
     else
       return Maybe!T.invalid;
-  }
-  bool isEmpty() {
-    return arrayForm.length == 0;
   }
   T pop() {
     T ret = arrayForm[$-1];
@@ -381,8 +382,8 @@ T echo(T)(T value, uint line = __LINE__) {
 // 0afc45ec-1e3f-55b0-95c7-9b41cbf15f0b
 enum bool writeAllStackLines = false;
 void writeStack() {
-  import core.runtime;
-  import core.stdc.stdio;
+  import core.runtime: defaultTraceHandler, defaultTraceDeallocator;
+  import core.stdc.stdio: printf;
   
   auto trace = defaultTraceHandler(null);
   foreach(line; trace) {
