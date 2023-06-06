@@ -330,6 +330,13 @@ struct NonemptyString {
   string stringForm;
   alias stringForm this;
   
+  this(NonemptyString nes) {
+    stringForm = nes.stringForm;
+  }
+  this(string str) {
+    stringForm = str;
+  }
+  
   invariant {
     mixin(assertString("stringForm.length > 0", "stringForm.length", "stringForm"));
   }
@@ -341,6 +348,16 @@ enum NonemptyString[] makeNonempty(string[] array) = (){
     ret ~= NonemptyString(str);
   return ret;
 }();
+
+unittest {
+  void takesString(String)(String str) {
+    string myString = str;
+    //
+  }
+  takesString("asdf");
+  takesString(NonemptyString("asdf"));
+}
+
 
 // 443af432-a1eb-5e49-94cd-942d123fb1c7
 enum T[] literalAs(T, alias array) = (){
